@@ -86,11 +86,12 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-10 sm:py-16">
       <header className="mb-6 text-center sm:mb-8">
-        <h1 className="text-3xl font-bold tracking-tight text-fg sm:text-5xl">
-          <span className="text-accent">Stack-Trace</span> Storyteller
+        <h1 className="text-5xl leading-[0.92] tracking-tight text-fg [overflow-wrap:anywhere] sm:text-7xl">
+          <span className="block font-display">Stack-Trace</span>
+          <span className="block font-serif italic text-accent">Storyteller</span>
         </h1>
-        <p className="mx-auto mt-3 max-w-lg text-sm text-fg-muted sm:text-base">
-          Paste a raw error or stack trace below and let the story unfold.
+        <p className="mx-auto mt-4 max-w-md font-mono text-sm leading-relaxed text-fg-muted">
+          <span className="text-accent">//</span> paste a trace — get the story behind it
         </p>
       </header>
 
@@ -160,9 +161,6 @@ export default function Home() {
         </div>
       )}
 
-      <footer className="mt-auto pt-12 text-center font-mono text-xs text-fg-faint">
-        Gemini-powered · your trace is analyzed on demand, never stored.
-      </footer>
     </main>
   );
 }
