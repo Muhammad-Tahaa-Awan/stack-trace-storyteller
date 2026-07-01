@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import type { Analysis, Confidence } from "@/app/lib/types";
+import type { Analysis, Confidence, RelatedIssue } from "@/app/lib/types";
 
 export const runtime = "nodejs";
+
+const GITHUB_SEARCH_ENDPOINT = "https://api.github.com/search/issues";
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
@@ -88,6 +90,51 @@ function validateAnalysis(value: unknown): Analysis | null {
   };
 }
 
+/**
+ * Searches GitHub issues for the given query and returns the top 3 matches by
+ * relevance. Supplementary to the analysis, so any failure resolves to an empty
+ * list rather than propagating an error.
+ */
+async function fetchRelatedIssues(query: string): Promise<RelatedIssue[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  // Restrict to issues (the endpoint otherwise mixes in pull requests).
+  const q = `${trimmed} is:issue`;
+  const url = `${GITHUB_SEARCH_ENDPOINT}?q=${encodeURIComponent(q)}&per_page=3`;
+
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+    "User-Agent": "stack-trace-storyteller",
+  };
+  const token = process.env.GITHUB_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    // Default sort is best-match (relevance); no `sort` param needed.
+    const response = await fetch(url, { headers });
+    if (!response.ok) return [];
+
+    const data = (await response.json()) as {
+      items?: Array<{ title?: string; html_url?: string; repository_url?: string }>;
+    };
+
+    const items = data.items ?? [];
+    if (items.length === 0) return [];
+
+    return items.slice(0, 3).map((item) => ({
+      title: item.title ?? "Untitled issue",
+      url: item.html_url ?? "",
+      repo: item.repository_url
+        ? item.repository_url.replace("https://api.github.com/repos/", "")
+        : "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function POST(request: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -171,5 +218,7 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json(analysis);
+  const relatedIssues = await fetchRelatedIssues(analysis.searchQuery);
+
+  return NextResponse.json({ ...analysis, relatedIssues });
 }
