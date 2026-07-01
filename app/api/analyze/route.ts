@@ -5,7 +5,9 @@ export const runtime = "nodejs";
 
 const GITHUB_SEARCH_ENDPOINT = "https://api.github.com/search/issues";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+// gemini-2.5-flash-lite has a much higher free-tier daily request quota than
+// gemini-2.5-flash (which caps at 20 requests/day), so it survives real use.
+const GEMINI_MODEL = "gemini-2.5-flash-lite";
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const SYSTEM_INSTRUCTION = `You are an expert software engineer who diagnoses errors and stack traces.
@@ -135,6 +137,61 @@ async function fetchRelatedIssues(query: string): Promise<RelatedIssue[]> {
   }
 }
 
+// Statuses worth retrying: rate limiting (429) and transient server errors.
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function backoffMs(attempt: number): number {
+  const base = Math.min(500 * 2 ** attempt, 2000); // 500ms, 1000ms
+  return base + Math.floor(Math.random() * 250); // jitter
+}
+
+type GeminiResult =
+  | { ok: true; response: Response }
+  | { ok: false; status: number | null }; // null = network failure
+
+/**
+ * Calls Gemini with up to 3 attempts, backing off on transient failures
+ * (429 rate limits, 5xx overloads, network errors). Error responses from
+ * Gemini return fast, so the retries stay well within the request budget.
+ */
+async function callGemini(apiKey: string, requestBody: string): Promise<GeminiResult> {
+  const maxAttempts = 3;
+  let lastStatus: number | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    let response: Response;
+    try {
+      response = await fetch(GEMINI_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: requestBody,
+      });
+    } catch {
+      lastStatus = null;
+      if (attempt < maxAttempts - 1) {
+        await sleep(backoffMs(attempt));
+        continue;
+      }
+      return { ok: false, status: null };
+    }
+
+    if (response.ok) return { ok: true, response };
+
+    lastStatus = response.status;
+    if (TRANSIENT_STATUSES.has(response.status) && attempt < maxAttempts - 1) {
+      await sleep(backoffMs(attempt));
+      continue;
+    }
+    return { ok: false, status: response.status };
+  }
+
+  return { ok: false, status: lastStatus };
+}
+
 export async function POST(request: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -167,36 +224,62 @@ export async function POST(request: Request) {
 
   const userPrompt = `Language: ${languageHint}\n\nError / stack trace:\n\n${trace}`;
 
-  let geminiResponse: Response;
-  try {
-    geminiResponse = await fetch(GEMINI_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          temperature: 0.2,
+  const requestBody = JSON.stringify({
+    systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+    contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+    generationConfig: {
+      responseMimeType: "application/json",
+      temperature: 0.2,
+      // Disable "thinking" — this is a bounded structured task, so it only
+      // adds tokens and latency (and makes rate limits easier to hit).
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+
+  const result = await callGemini(apiKey, requestBody);
+
+  if (!result.ok) {
+    const { status } = result;
+    if (status === null) {
+      return NextResponse.json(
+        { error: "Couldn't reach the Gemini API. Please try again." },
+        { status: 502 },
+      );
+    }
+    if (status === 429) {
+      return NextResponse.json(
+        {
+          error:
+            "Gemini's rate limit was hit (free tier). Wait a few seconds, then try again.",
         },
-      }),
-    });
-  } catch {
+        { status: 429 },
+      );
+    }
+    if (status === 500 || status === 502 || status === 503 || status === 504) {
+      return NextResponse.json(
+        { error: "The model is temporarily overloaded. Please retry in a moment." },
+        { status: 503 },
+      );
+    }
+    if (status === 400) {
+      return NextResponse.json(
+        { error: "Gemini rejected the request — the trace may be too long. Try trimming it." },
+        { status: 400 },
+      );
+    }
+    if (status === 401 || status === 403) {
+      return NextResponse.json(
+        { error: "The server's Gemini API key is invalid or lacks access." },
+        { status: 502 },
+      );
+    }
     return NextResponse.json(
-      { error: "Failed to reach the Gemini API." },
+      { error: `Gemini API error (status ${status}). Please try again.` },
       { status: 502 },
     );
   }
 
-  if (!geminiResponse.ok) {
-    return NextResponse.json(
-      { error: `Gemini API returned an error (status ${geminiResponse.status}).` },
-      { status: 502 },
-    );
-  }
+  const geminiResponse = result.response;
 
   const data = (await geminiResponse.json()) as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
