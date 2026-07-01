@@ -2,14 +2,22 @@ import type { AnalyzeResponse } from "@/app/lib/types";
 import { ConfidenceBadge } from "./ConfidenceBadge";
 import { CopyButton } from "./CopyButton";
 
-export function ResultsView({ result }: { result: AnalyzeResponse }) {
+interface ResultsViewProps {
+  result: AnalyzeResponse;
+  reportText: string;
+}
+
+export function ResultsView({ result, reportText }: ResultsViewProps) {
   const { rootCause, plainExplanation, fixSteps, confidence, relatedIssues } = result;
 
   return (
     <section aria-label="Analysis results" className="mt-8 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-white">Analysis</h2>
-        <ConfidenceBadge confidence={confidence} />
+        <div className="flex flex-wrap items-center gap-3">
+          <ConfidenceBadge confidence={confidence} />
+          <CopyButton text={reportText} label="Copy full report" copiedLabel="Report copied" />
+        </div>
       </div>
 
       <p className="text-sm leading-relaxed text-gray-300 sm:text-base">{plainExplanation}</p>
