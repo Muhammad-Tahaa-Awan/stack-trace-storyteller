@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnalyzeResponse } from "@/app/lib/types";
 import { ResultsView } from "@/app/components/ResultsView";
 import { ResultsSkeleton } from "@/app/components/ResultsSkeleton";
@@ -19,6 +19,12 @@ const LANGUAGES = [
   { value: "other", label: "Other" },
 ] as const;
 
+const EDITOR_PLACEHOLDER =
+  "TypeError: Cannot read properties of undefined (reading 'map')\n" +
+  "    at HomePage (app/page.tsx:12:34)\n" +
+  "    at renderWithHooks (react-dom.development.js:15486:18)\n" +
+  "paste over this to explain your own trace";
+
 export default function Home() {
   const [trace, setTrace] = useState("");
   const [language, setLanguage] = useState<string>("auto");
@@ -28,6 +34,17 @@ export default function Home() {
 
   const isEmpty = trace.trim().length === 0;
   const canSubmit = !isEmpty && !isLoading;
+
+  // Editor gutter: line numbers track the content, falling back to the
+  // placeholder's line count (plus a trailing blank line) when empty.
+  const gutterRef = useRef<HTMLDivElement>(null);
+  const lineNumberCount =
+    trace.length > 0 ? trace.split("\n").length : EDITOR_PLACEHOLDER.split("\n").length + 1;
+  const headerLanguage = language === "auto" ? "plaintext" : language;
+
+  function handleEditorScroll(event: React.UIEvent<HTMLTextAreaElement>) {
+    if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop;
+  }
 
   // Restore a shared analysis from the URL hash on first load.
   useEffect(() => {
@@ -95,17 +112,39 @@ export default function Home() {
         </p>
       </header>
 
-      <div className="rounded-xl border border-line bg-panel p-2 shadow-2xl shadow-black/40 backdrop-blur transition-colors duration-150 ease-out focus-within:border-accent-ring">
-        <textarea
-          aria-label="Error or stack trace"
-          value={trace}
-          onChange={(event) => setTrace(event.target.value)}
-          placeholder={
-            "Paste your error or stack trace here...\n\ne.g. TypeError: Cannot read properties of undefined (reading 'map')\n    at HomePage (app/page.tsx:12:34)\n    at renderWithHooks (react-dom.development.js:15486:18)"
-          }
-          spellCheck={false}
-          className="h-60 w-full resize-y rounded-lg bg-transparent p-4 font-mono text-sm leading-relaxed text-fg caret-accent placeholder:text-fg-faint focus:outline-none sm:h-72"
-        />
+      <div className="overflow-hidden rounded-xl border border-line bg-panel shadow-2xl shadow-black/40 backdrop-blur transition-colors duration-150 ease-out focus-within:border-accent-ring">
+        {/* Editor tab bar */}
+        <div className="flex items-stretch justify-between border-b border-line bg-elevated">
+          <div className="flex items-center border-t-2 border-accent bg-panel px-4 py-2 font-mono text-xs font-semibold text-fg">
+            error.log
+          </div>
+          <span className="flex items-center px-4 font-mono text-xs text-fg-faint">
+            {headerLanguage}
+          </span>
+        </div>
+
+        {/* Editor body: line-number gutter + textarea */}
+        <div className="flex h-60 sm:h-72">
+          <div
+            ref={gutterRef}
+            aria-hidden="true"
+            className="shrink-0 select-none overflow-hidden py-4 pl-4 pr-3 text-right font-mono text-sm leading-6 text-fg-faint"
+          >
+            {Array.from({ length: lineNumberCount }, (_, i) => (
+              <div key={i}>{i + 1}</div>
+            ))}
+          </div>
+          <textarea
+            aria-label="Error or stack trace"
+            value={trace}
+            onChange={(event) => setTrace(event.target.value)}
+            onScroll={handleEditorScroll}
+            wrap="off"
+            placeholder={EDITOR_PLACEHOLDER}
+            spellCheck={false}
+            className="h-full min-w-0 flex-1 resize-none overflow-auto bg-transparent py-4 pl-1 pr-4 font-mono text-sm leading-6 text-fg caret-accent placeholder:text-fg-faint focus:outline-none"
+          />
+        </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
