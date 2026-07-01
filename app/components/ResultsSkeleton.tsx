@@ -1,5 +1,5 @@
 function Bar({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse rounded bg-terminal-border/60 ${className}`} />;
+  return <div className={`animate-pulse rounded bg-line ${className}`} />;
 }
 
 export function ResultsSkeleton() {
@@ -16,7 +16,7 @@ export function ResultsSkeleton() {
         <Bar className="h-4 w-4/5" />
       </div>
 
-      <div className="rounded-xl border border-terminal-border bg-terminal-panel/70 p-4">
+      <div className="rounded-xl border border-line bg-panel p-4">
         <Bar className="mb-3 h-4 w-24" />
         <Bar className="h-4 w-3/4" />
       </div>
@@ -24,7 +24,7 @@ export function ResultsSkeleton() {
       <div className="space-y-3">
         <Bar className="h-4 w-20" />
         {[0, 1, 2].map((i) => (
-          <Bar key={i} className="h-10 w-full" />
+          <Bar key={i} className="h-12 w-full" />
         ))}
       </div>
     </section>

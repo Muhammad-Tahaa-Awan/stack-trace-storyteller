@@ -34,7 +34,11 @@ export function CopyButton({
       type="button"
       onClick={handleCopy}
       aria-label={ariaLabel ?? label}
-      className={`inline-flex shrink-0 items-center gap-1 rounded-md border border-terminal-border px-2 py-1 text-xs font-medium text-gray-400 transition-colors hover:border-terminal-accent hover:text-terminal-accent focus:outline-none focus:ring-1 focus:ring-terminal-accent ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 font-mono text-xs font-medium transition-colors duration-150 ease-out ${
+        copied
+          ? "border-conf-high-ring text-conf-high"
+          : "border-line text-fg-faint hover:border-accent hover:text-accent"
+      } ${className}`}
     >
       {copied ? copiedLabel : label}
     </button>

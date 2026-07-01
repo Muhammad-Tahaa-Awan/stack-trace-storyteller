@@ -84,83 +84,85 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center px-4 py-10 sm:py-16">
-      <div className="w-full max-w-3xl">
-        <header className="mb-6 text-center sm:mb-8">
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-5xl">
-            <span className="text-terminal-accent">Stack-Trace</span> Storyteller
-          </h1>
-          <p className="mt-3 text-sm text-gray-400 sm:text-base">
-            Paste a raw error or stack trace below and let the story unfold.
-          </p>
-        </header>
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-10 sm:py-16">
+      <header className="mb-6 text-center sm:mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-fg sm:text-5xl">
+          <span className="text-accent">Stack-Trace</span> Storyteller
+        </h1>
+        <p className="mx-auto mt-3 max-w-lg text-sm text-fg-muted sm:text-base">
+          Paste a raw error or stack trace below and let the story unfold.
+        </p>
+      </header>
 
-        <div className="rounded-xl border border-terminal-border bg-terminal-panel/70 p-2 shadow-2xl shadow-black/40 backdrop-blur">
-          <textarea
-            aria-label="Error or stack trace"
-            value={trace}
-            onChange={(event) => setTrace(event.target.value)}
-            placeholder={
-              "Paste your error or stack trace here...\n\ne.g. TypeError: Cannot read properties of undefined (reading 'map')\n    at HomePage (app/page.tsx:12:34)\n    at renderWithHooks (react-dom.development.js:15486:18)"
-            }
-            spellCheck={false}
-            className="h-60 w-full resize-y rounded-lg bg-transparent p-4 font-mono text-sm leading-relaxed text-gray-100 placeholder:text-gray-600 focus:outline-none sm:h-72"
-          />
-        </div>
+      <div className="rounded-xl border border-line bg-panel p-2 shadow-2xl shadow-black/40 backdrop-blur transition-colors duration-150 ease-out focus-within:border-accent-ring">
+        <textarea
+          aria-label="Error or stack trace"
+          value={trace}
+          onChange={(event) => setTrace(event.target.value)}
+          placeholder={
+            "Paste your error or stack trace here...\n\ne.g. TypeError: Cannot read properties of undefined (reading 'map')\n    at HomePage (app/page.tsx:12:34)\n    at renderWithHooks (react-dom.development.js:15486:18)"
+          }
+          spellCheck={false}
+          className="h-60 w-full resize-y rounded-lg bg-transparent p-4 font-mono text-sm leading-relaxed text-fg caret-accent placeholder:text-fg-faint focus:outline-none sm:h-72"
+        />
+      </div>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <label className="flex items-center gap-2 text-sm text-gray-400">
-            <span>Language</span>
-            <select
-              aria-label="Source language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-              className="flex-1 rounded-lg border border-terminal-border bg-terminal-panel px-3 py-2 font-mono text-sm text-gray-100 focus:border-terminal-accent focus:outline-none sm:flex-none"
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang.value} value={lang.value}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
-          </label>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="flex items-center gap-2 text-sm text-fg-muted">
+          <span>Language</span>
+          <select
+            aria-label="Source language"
+            value={language}
+            onChange={(event) => setLanguage(event.target.value)}
+            className="flex-1 rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-sm text-fg transition-colors duration-150 ease-out hover:border-accent-ring focus:border-accent focus:outline-none sm:flex-none"
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang.value} value={lang.value}>
+                {lang.label}
+              </option>
+            ))}
+          </select>
+        </label>
 
+        <button
+          type="button"
+          onClick={handleExplain}
+          disabled={!canSubmit}
+          aria-busy={isLoading}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-6 py-2.5 text-sm font-semibold text-accent-on transition-colors duration-150 ease-out hover:bg-accent-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+        >
+          {isLoading && (
+            <span
+              aria-hidden="true"
+              className="h-4 w-4 animate-spin rounded-full border-2 border-accent-on-soft border-t-accent-on"
+            />
+          )}
+          {isLoading ? "Explaining..." : "Explain"}
+        </button>
+      </div>
+
+      {isLoading && <ResultsSkeleton />}
+      {!isLoading && error && <ErrorBanner message={error} />}
+      {!isLoading && !error && result && (
+        <ResultsView result={result} reportText={buildReport(trace, language, result)} />
+      )}
+
+      {!isLoading && !error && !result && (
+        <div className="mt-6 text-center">
+          <p className="text-xs text-fg-faint">First time here?</p>
           <button
             type="button"
-            onClick={handleExplain}
-            disabled={!canSubmit}
-            aria-busy={isLoading}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-terminal-accent px-6 py-2.5 text-sm font-semibold text-terminal-bg transition-colors hover:bg-sky-300 focus:outline-none focus:ring-2 focus:ring-terminal-accent focus:ring-offset-2 focus:ring-offset-terminal-bg disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+            onClick={loadSample}
+            className="mt-2 rounded-lg border border-line px-4 py-2 text-sm text-fg-muted transition-colors duration-150 ease-out hover:border-accent hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
-            {isLoading && (
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 animate-spin rounded-full border-2 border-terminal-bg/40 border-t-terminal-bg"
-              />
-            )}
-            {isLoading ? "Explaining..." : "Explain"}
+            Try a sample Python traceback →
           </button>
         </div>
+      )}
 
-        {isLoading && <ResultsSkeleton />}
-        {!isLoading && error && <ErrorBanner message={error} />}
-        {!isLoading && !error && result && (
-          <ResultsView result={result} reportText={buildReport(trace, language, result)} />
-        )}
-
-        {!isLoading && !error && !result && (
-          <div className="mt-6 text-center">
-            <p className="text-xs text-gray-600">First time here?</p>
-            <button
-              type="button"
-              onClick={loadSample}
-              className="mt-2 rounded-lg border border-terminal-border px-4 py-2 text-sm text-gray-300 transition-colors hover:border-terminal-accent hover:text-terminal-accent focus:outline-none focus:ring-1 focus:ring-terminal-accent"
-            >
-              Try a sample Python traceback →
-            </button>
-          </div>
-        )}
-      </div>
+      <footer className="mt-auto pt-12 text-center font-mono text-xs text-fg-faint">
+        Gemini-powered · your trace is analyzed on demand, never stored.
+      </footer>
     </main>
   );
 }
