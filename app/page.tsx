@@ -31,6 +31,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isNarrow, setIsNarrow] = useState(false);
 
   const isEmpty = trace.trim().length === 0;
   const canSubmit = !isEmpty && !isLoading;
@@ -45,6 +46,16 @@ export default function Home() {
   function handleEditorScroll(event: React.UIEvent<HTMLTextAreaElement>) {
     if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop;
   }
+
+  // Below the `sm` breakpoint, wrap text and hide the line-number gutter so long
+  // trace lines stay readable without horizontal scrolling.
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const update = () => setIsNarrow(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
 
   // Restore a shared analysis from the URL hash on first load.
   useEffect(() => {
@@ -125,24 +136,26 @@ export default function Home() {
 
         {/* Editor body: line-number gutter + textarea */}
         <div className="flex h-60 sm:h-72">
-          <div
-            ref={gutterRef}
-            aria-hidden="true"
-            className="shrink-0 select-none overflow-hidden py-4 pl-4 pr-3 text-right font-mono text-sm leading-6 text-fg-faint"
-          >
-            {Array.from({ length: lineNumberCount }, (_, i) => (
-              <div key={i}>{i + 1}</div>
-            ))}
-          </div>
+          {!isNarrow && (
+            <div
+              ref={gutterRef}
+              aria-hidden="true"
+              className="shrink-0 select-none overflow-hidden py-4 pl-4 pr-3 text-right font-mono text-sm leading-6 text-fg-faint"
+            >
+              {Array.from({ length: lineNumberCount }, (_, i) => (
+                <div key={i}>{i + 1}</div>
+              ))}
+            </div>
+          )}
           <textarea
             aria-label="Error or stack trace"
             value={trace}
             onChange={(event) => setTrace(event.target.value)}
             onScroll={handleEditorScroll}
-            wrap="off"
+            wrap={isNarrow ? "soft" : "off"}
             placeholder={EDITOR_PLACEHOLDER}
             spellCheck={false}
-            className="h-full min-w-0 flex-1 resize-none overflow-auto bg-transparent py-4 pl-1 pr-4 font-mono text-sm leading-6 text-fg caret-accent placeholder:text-fg-faint focus:outline-none"
+            className="h-full min-w-0 flex-1 resize-none overflow-auto bg-transparent py-4 pl-4 pr-4 font-mono text-sm leading-6 text-fg caret-accent placeholder:text-fg-faint focus:outline-none sm:pl-1"
           />
         </div>
       </div>
