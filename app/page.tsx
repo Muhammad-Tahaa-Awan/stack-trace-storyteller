@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import type { AnalyzeResponse } from "@/app/lib/types";
+import { ResultsView } from "@/app/components/ResultsView";
+import { ResultsSkeleton } from "@/app/components/ResultsSkeleton";
+import { ErrorBanner } from "@/app/components/ErrorBanner";
 
 const LANGUAGES = [
   { value: "auto", label: "Auto-detect" },
@@ -17,6 +21,8 @@ export default function Home() {
   const [trace, setTrace] = useState("");
   const [language, setLanguage] = useState<string>("auto");
   const [isLoading, setIsLoading] = useState(false);
+  const [result, setResult] = useState<AnalyzeResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const isEmpty = trace.trim().length === 0;
   const canSubmit = !isEmpty && !isLoading;
@@ -25,16 +31,33 @@ export default function Home() {
     if (!canSubmit) return;
 
     setIsLoading(true);
+    setError(null);
+    setResult(null);
+
     try {
-      // Wiring for the explain request lands in a later phase.
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trace, language }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(typeof data?.error === "string" ? data.error : "Something went wrong.");
+        return;
+      }
+
+      setResult(data as AnalyzeResponse);
+    } catch {
+      setError("Could not reach the analysis service. Please try again.");
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center px-4 py-16">
+    <main className="flex min-h-screen flex-col items-center px-4 py-16">
       <div className="w-full max-w-3xl">
         <header className="mb-8 text-center">
           <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl">
@@ -92,9 +115,15 @@ export default function Home() {
           </button>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-600">
-          Nothing is sent anywhere yet — this is the input surface.
-        </p>
+        {isLoading && <ResultsSkeleton />}
+        {!isLoading && error && <ErrorBanner message={error} />}
+        {!isLoading && !error && result && <ResultsView result={result} />}
+
+        {!isLoading && !error && !result && (
+          <p className="mt-4 text-center text-xs text-gray-600">
+            Nothing is sent anywhere yet — paste a trace and hit Explain.
+          </p>
+        )}
       </div>
     </main>
   );
