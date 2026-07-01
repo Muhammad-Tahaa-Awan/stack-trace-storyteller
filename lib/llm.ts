@@ -9,7 +9,12 @@
  * answered. If every provider fails, a single error object is thrown.
  */
 
-const PROVIDER_TIMEOUT_MS = 5000;
+// Fail fast on the primary, but give the fallback enough room to actually
+// answer: Groq responds in ~1s, whereas Gemini flash-lite routinely needs
+// ~9-12s for this task. A single 5s cap would abort every Gemini call before
+// it returns, making the fallback dead-on-arrival.
+const GROQ_TIMEOUT_MS = 5000;
+const GEMINI_TIMEOUT_MS = 12000;
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
@@ -46,9 +51,13 @@ function safeParseJson(raw: string): Record<string, unknown> | null {
 }
 
 /** Runs a fetch with a hard timeout via AbortController; aborts throw. */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
@@ -79,7 +88,7 @@ async function callGroq(
       response_format: { type: "json_object" },
       temperature: 0.2,
     }),
-  });
+  }, GROQ_TIMEOUT_MS);
 
   if (!response.ok) throw new Error(`Groq request failed (${response.status})`);
 
@@ -116,7 +125,7 @@ async function callGemini(
         thinkingConfig: { thinkingBudget: 0 },
       },
     }),
-  });
+  }, GEMINI_TIMEOUT_MS);
 
   if (!response.ok) throw new Error(`Gemini request failed (${response.status})`);
 
