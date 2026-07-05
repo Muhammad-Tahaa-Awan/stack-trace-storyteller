@@ -31,7 +31,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isNarrow, setIsNarrow] = useState(false);
 
   const isEmpty = trace.trim().length === 0;
   const canSubmit = !isEmpty && !isLoading;
@@ -39,23 +38,38 @@ export default function Home() {
   // Editor gutter: line numbers track the content, falling back to the
   // placeholder's line count (plus a trailing blank line) when empty.
   const gutterRef = useRef<HTMLDivElement>(null);
-  const lineNumberCount =
-    trace.length > 0 ? trace.split("\n").length : EDITOR_PLACEHOLDER.split("\n").length + 1;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mirrorRef = useRef<HTMLDivElement>(null);
+  const [lineHeights, setLineHeights] = useState<number[]>([]);
+  const [sizeTick, setSizeTick] = useState(0);
+
   const headerLanguage = language === "auto" ? "plaintext" : language;
+  // Number the actual content, or the placeholder while the field is empty.
+  const editorLines = (trace.length > 0 ? trace : EDITOR_PLACEHOLDER).split("\n");
 
   function handleEditorScroll(event: React.UIEvent<HTMLTextAreaElement>) {
     if (gutterRef.current) gutterRef.current.scrollTop = event.currentTarget.scrollTop;
   }
 
-  // Below the `sm` breakpoint, wrap text and hide the line-number gutter so long
-  // trace lines stay readable without horizontal scrolling.
+  // Re-measure when the textarea width changes (e.g. viewport resize).
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const update = () => setIsNarrow(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    const textarea = textareaRef.current;
+    if (!textarea || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setSizeTick((t) => t + 1));
+    observer.observe(textarea);
+    return () => observer.disconnect();
   }, []);
+
+  // Measure each logical line's wrapped height via a hidden mirror, so the
+  // gutter numbers stay aligned even when long lines wrap onto multiple rows.
+  useEffect(() => {
+    const mirror = mirrorRef.current;
+    const textarea = textareaRef.current;
+    if (!mirror || !textarea) return;
+    mirror.style.width = `${textarea.clientWidth}px`;
+    const heights = Array.from(mirror.children).map((child) => (child as HTMLElement).offsetHeight);
+    setLineHeights(heights);
+  }, [trace, sizeTick]);
 
   // Restore a shared analysis from the URL hash on first load.
   useEffect(() => {
@@ -135,28 +149,38 @@ export default function Home() {
         </div>
 
         {/* Editor body: line-number gutter + textarea */}
-        <div className="flex h-60 sm:h-72">
-          {!isNarrow && (
-            <div
-              ref={gutterRef}
-              aria-hidden="true"
-              className="shrink-0 select-none overflow-hidden py-4 pl-4 pr-3 text-right font-mono text-sm leading-6 text-fg-faint"
-            >
-              {Array.from({ length: lineNumberCount }, (_, i) => (
-                <div key={i}>{i + 1}</div>
-              ))}
-            </div>
-          )}
+        <div className="relative flex h-60 sm:h-72">
+          <div
+            ref={gutterRef}
+            aria-hidden="true"
+            className="shrink-0 select-none overflow-hidden py-4 pl-4 pr-3 text-right font-mono text-sm leading-6 text-fg-faint"
+          >
+            {editorLines.map((_, i) => (
+              <div key={i} style={{ height: lineHeights[i] }}>
+                {i + 1}
+              </div>
+            ))}
+          </div>
           <textarea
+            ref={textareaRef}
             aria-label="Error or stack trace"
             value={trace}
             onChange={(event) => setTrace(event.target.value)}
             onScroll={handleEditorScroll}
-            wrap={isNarrow ? "soft" : "off"}
             placeholder={EDITOR_PLACEHOLDER}
             spellCheck={false}
-            className="h-full min-w-0 flex-1 resize-none overflow-auto bg-transparent py-4 pl-4 pr-4 font-mono text-sm leading-6 text-fg caret-accent placeholder:text-fg-faint focus:outline-none sm:pl-1"
+            className="h-full min-w-0 flex-1 resize-none overflow-auto whitespace-pre-wrap bg-transparent py-4 pl-1 pr-4 font-mono text-sm leading-6 text-fg caret-accent placeholder:text-fg-faint focus:outline-none [overflow-wrap:anywhere]"
           />
+          {/* Hidden mirror: measures each wrapped line's height for the gutter. */}
+          <div
+            ref={mirrorRef}
+            aria-hidden="true"
+            className="pointer-events-none invisible absolute left-0 top-0 -z-10 whitespace-pre-wrap pl-1 pr-4 font-mono text-sm leading-6 [overflow-wrap:anywhere]"
+          >
+            {editorLines.map((line, i) => (
+              <div key={i}>{line === "" ? " " : line}</div>
+            ))}
+          </div>
         </div>
       </div>
 
